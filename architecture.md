@@ -18,24 +18,22 @@ consistent monorepo scaffold every time.
 
 ```yaml
 project:
-  name: "job-search-ai"               # e.g. "payments-platform"
-  github_org: "cstortz"           # e.g. "acme-corp"
-  github_repo: "job_search_ai"         # e.g. "payments-platform" (the monorepo repo name)
+  name: "job-search-ai"
+  github_org: "cstortz"
+  github_repo: "job_search_ai"
 
 services:
-  - name: "<SERVICE_1_NAME>"           # e.g. "API Gateway" — human-readable label for docs/comments
-    filename: "<SERVICE_1_FILENAME>"   # e.g. "api-gateway" — used for all dirs, files, and workflow names
-    port: <SERVICE_1_PORT>             # e.g. 8080
-    language: "<SERVICE_1_LANG>"       # node | python | go | java | unknown
-    health_check_path: "/healthz"      # override if different
+  - name: "Job Search Web"
+    filename: "job-search-web"
+    port: 3000
+    language: "node"
+    health_check_path: "/api/health"
 
-  - name: "<SERVICE_2_NAME>"           # e.g. "User Service"
-    filename: "<SERVICE_2_FILENAME>"   # e.g. "user-service"
-    port: <SERVICE_2_PORT>
-    language: "<SERVICE_2_LANG>"
+  - name: "Job Search API"
+    filename: "job-search-api"
+    port: 8000
+    language: "python"
     health_check_path: "/healthz"
-
-  # Add more services as needed using the same structure above
 
 environments:
   staging:
@@ -45,6 +43,29 @@ environments:
     namespace: "production"
     ingress_domain: "<PRODUCTION_DOMAIN>"    # e.g. "acme.internal"
 ```
+
+---
+
+## Application Stack (Job Search AI)
+
+Technology choices for this project. The DevOps scaffold above is generic; this section records the application-level stack used in the monorepo.
+
+| Layer        | Choice               | Notes |
+|-------------|----------------------|-------|
+| Frontend    | Next.js              | App Router, TypeScript. Served as Node app in container (port 3000) or static export + optional reverse proxy. |
+| Backend     | FastAPI (Python)     | Separate service (`job-search-api`). Handles API, AI provider calls, and DB access. |
+| Database    | PostgreSQL + pgvector | Persistence for jobs, applications, and user-related data. **pgvector** extension enabled for vector columns; used for RAG over skills (embeddings stored in Postgres, similarity search in FastAPI). Not containerized in this scaffold; run on-prem (same cluster or external); Postgres image or install must include pgvector. |
+| Backend ORM | SQLAlchemy + Alembic | Schema and migrations live in the FastAPI service. Use `pgvector` Python package with SQLAlchemy for vector columns and similarity search. (Prisma is Node-only and not used.) |
+| AI          | Provider API         | OpenAI, Anthropic, or similar called from the FastAPI backend. Embeddings API used for RAG (skill indexing and query embedding). API keys in SealedSecrets. |
+| Auth        | Auth0                | Frontend uses Auth0 SDK; backend validates JWTs. Auth0 tenant and client IDs in env/SealedSecrets. |
+| Hosting     | On-premises          | This architecture doc: self-hosted GitHub Actions runner, GHCR, Kubernetes, Helm. No Vercel or managed PaaS. |
+
+**Service responsibilities:**
+
+- **job-search-web:** Next.js app. Auth0 login, calls `job-search-api` with bearer token. No direct DB or AI provider access.
+- **job-search-api:** FastAPI. JWT validation, PostgreSQL (with pgvector) via SQLAlchemy, AI provider integration (including embeddings for RAG), business logic. Exposes REST (and optionally SSE for streaming).
+
+**Vector search and RAG (skills):** Skill text and embeddings are stored in PostgreSQL using pgvector. The FastAPI service embeds user queries, runs similarity search in Postgres, retrieves top-k skill chunks, and passes them to the LLM as context (RAG). No separate vector DB or new services; the same Postgres instance and `job-search-api` handle it.
 
 ---
 
