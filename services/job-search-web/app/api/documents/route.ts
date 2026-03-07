@@ -1,25 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { isPreparedClientError } from "../../../src/lib/db/db-repository";
+import {
+  UnauthorizedError,
+  getOrCreateCurrentUser,
+} from "../../../src/lib/server/current-user";
 import { documentRepository } from "../../../src/lib/server/repositories";
 
-function getUserId(request: NextRequest): string | null {
-  return request.headers.get("x-user-id");
-}
-
 export async function GET(request: NextRequest) {
-  const userId = getUserId(request);
-  if (!userId) {
-    return NextResponse.json(
-      { error: "Missing x-user-id header." },
-      { status: 401 },
-    );
-  }
-
   try {
+    const { user } = await getOrCreateCurrentUser();
+    const userId = user.id;
     const documents = await documentRepository.listByUserId(userId);
     return NextResponse.json({ documents });
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     if (isPreparedClientError(error)) {
       return NextResponse.json(
         { error: error.message },

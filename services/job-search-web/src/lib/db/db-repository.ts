@@ -119,6 +119,25 @@ export interface DocumentSqlTemplates {
   listDocumentsByUser: string;
   findDocumentByIdForUser: string;
   deleteDocumentByIdForUser: string;
+  insertUploadedDocument: string;
+}
+
+export interface UserRecord {
+  id: string;
+  auth0_subject_id: string;
+  name: string;
+  email: string;
+  email_verified: boolean;
+  phone: string | null;
+  linkedin_url: string | null;
+  timezone: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserSqlTemplates {
+  upsertUserByAuth0Subject: string;
+  findUserByAuth0Subject: string;
 }
 
 /**
@@ -138,7 +157,7 @@ export class DocumentRepository extends PreparedRepository {
 
   async listByUserId(userId: string): Promise<DocumentRecord[]> {
     return this.selectMany<DocumentRecord>(this.sql.listDocumentsByUser, {
-      user_id: userId,
+      "1": userId,
     });
   }
 
@@ -147,17 +166,89 @@ export class DocumentRepository extends PreparedRepository {
     userId: string,
   ): Promise<DocumentRecord | null> {
     return this.selectOne<DocumentRecord>(this.sql.findDocumentByIdForUser, {
-      document_id: documentId,
-      user_id: userId,
+      "1": documentId,
+      "2": userId,
     });
   }
 
   async deleteByIdForUser(documentId: string, userId: string): Promise<number> {
     const response = await this.delete(this.sql.deleteDocumentByIdForUser, {
-      document_id: documentId,
-      user_id: userId,
+      "1": documentId,
+      "2": userId,
     });
     return response.affected_rows ?? 0;
+  }
+
+  async createUploadedDocument(input: {
+    userId: string;
+    filename: string;
+    contentType: string;
+    sizeBytes: number;
+    filePath: string;
+    fileUrl?: string | null;
+  }): Promise<DocumentRecord | null> {
+    const response = await this.insert<DocumentRecord>(
+      this.sql.insertUploadedDocument,
+      {
+        "1": input.userId,
+        "2": "other",
+        "3": input.filename,
+        "4": input.fileUrl ?? null,
+        "5": input.filePath,
+        "6": "local",
+        "7": input.sizeBytes,
+        "8": input.filename.includes(".")
+          ? input.filename.split(".").pop()?.toLowerCase() ?? null
+          : null,
+        "9": "unverified",
+        "10": JSON.stringify({ contentType: input.contentType }),
+      },
+    );
+
+    return response.data?.[0] ?? null;
+  }
+}
+
+export class UserRepository extends PreparedRepository {
+  private readonly sql: UserSqlTemplates;
+
+  constructor(
+    sqlTemplates: UserSqlTemplates,
+    client: PreparedClient = createPreparedClient(),
+  ) {
+    super(client);
+    this.sql = sqlTemplates;
+  }
+
+  async upsertByAuth0Subject(input: {
+    auth0SubjectId: string;
+    email: string;
+    name: string;
+    emailVerified?: boolean;
+    phone?: string | null;
+    linkedinUrl?: string | null;
+    timezone?: string | null;
+  }): Promise<UserRecord | null> {
+    const response = await this.insert<UserRecord>(
+      this.sql.upsertUserByAuth0Subject,
+      {
+        "1": input.auth0SubjectId,
+        "2": input.name,
+        "3": input.email,
+        "4": input.emailVerified ?? false,
+        "5": input.phone ?? null,
+        "6": input.linkedinUrl ?? null,
+        "7": input.timezone ?? "UTC",
+      },
+    );
+
+    return response.data?.[0] ?? null;
+  }
+
+  async findByAuth0Subject(auth0SubjectId: string): Promise<UserRecord | null> {
+    return this.selectOne<UserRecord>(this.sql.findUserByAuth0Subject, {
+      "1": auth0SubjectId,
+    });
   }
 }
 
