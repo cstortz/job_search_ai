@@ -19,6 +19,16 @@ AUTH0_CLIENT_SECRET=
 AUTH0_SECRET=
 APP_BASE_URL=http://dev01.int.stortz.tech:3000
 DB_API_BASE_URL=http://localhost:8100
+LLM_PROVIDER=mock
+# For Claude
+# ANTHROPIC_API_KEY=
+# ANTHROPIC_MODEL=claude-sonnet-4-6
+# For OpenAI
+# OPENAI_API_KEY=
+# OPENAI_MODEL=gpt-4.1-mini
+# For Gemini
+# GEMINI_API_KEY=
+# GEMINI_MODEL=gemini-2.5-flash
 ```
 
 Generate `AUTH0_SECRET` with:
@@ -47,6 +57,50 @@ openssl rand -hex 32
 - OpenAPI: `http://dev01.int.stortz.tech:3000/openapi.json`
 
 Protected routes in Swagger require an Auth0 `appSession` cookie.
+
+## End-to-end auth + API smoke flow
+
+Use the script below to run the auth/session + new jobs endpoints in order, carrying IDs from earlier responses:
+
+```bash
+cd /home/cstortz/repos/initial_build/services/job-search-web
+bash scripts/smoke-auth-flow.sh
+```
+
+The script will prompt you to:
+
+1. Login at `/auth/login`
+2. Complete MFA
+3. Paste the `appSession` cookie value
+
+Then it runs:
+
+- `/api/auth/session`
+- `/api/auth/me`
+- `/api/job-sites`
+- `/api/job-listings` (+ filtered variants if data exists)
+- `/api/job-listings/{id}`
+- `/api/job-listings/{id}/status`
+- `/api/resume-packets` (+ filtered variants)
+- `/api/skills` (list + create + read + update + delete smoke CRUD)
+- `/auth/logout`
+
+Optional flags:
+
+```bash
+BASE_URL=http://localhost:3000 APP_SESSION='<cookie>' VERBOSE=1 bash scripts/smoke-auth-flow.sh
+```
+
+## LLM provider configuration
+
+Set `LLM_PROVIDER` to one of:
+
+- `mock` (default, no external API call)
+- `anthropic` (or `claude`)
+- `openai`
+- `gemini` (or `google`)
+
+When using a real provider, set the corresponding API key env var in `.env.local`.
 
 ## Localhost fallback (optional)
 

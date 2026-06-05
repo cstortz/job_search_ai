@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: job-search
+  labels:
+    app.kubernetes.io/name: job-search
+    environment: dev

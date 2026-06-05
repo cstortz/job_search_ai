@@ -1,0 +1,13 @@
+.next
+node_modules
+coverage
+dist
+*.log
+.uploads
+.env.local
+.env*.local
+README.md
+TODO.md
+FRONTEND_CAPTURE_PAGE_MAP.md
+UI_UX_LOOK_AND_FEEL.md
+PRODUCTION_DEPLOYMENT_CHECKLIST.md

@@ -21,7 +21,7 @@ export function buildOpenApiSpec() {
         post: {
           summary: "Create or update user from Auth0 profile",
           description:
-            "Upserts a user record from the current Auth0 session. Accepts optional profile overrides (phone/linkedin/timezone).",
+            "Upserts a user record from the current Auth0 session. Accepts profile overrides including address, resume inclusion flags, and other URLs.",
           operationId: "syncUser",
           tags: ["Auth"],
           security: [{ auth0Session: [] }],
@@ -33,16 +33,78 @@ export function buildOpenApiSpec() {
                   type: "object",
                   properties: {
                     phone: { type: ["string", "null"] },
-                    linkedinUrl: { type: ["string", "null"] },
+                    linkedinUrl: {
+                      type: ["string", "null"],
+                      description:
+                        "LinkedIn profile value. UI edits the handle after linkedin.com/in/; stored as full profile URL when possible.",
+                    },
+                    linkedinHandle: {
+                      type: ["string", "null"],
+                      description:
+                        "Optional UI-only handle segment (linkedin.com/in/{handle}). Prefer linkedinUrl on save.",
+                    },
+                    address: {
+                      type: ["object", "null"],
+                      properties: {
+                        street: { type: "string" },
+                        streetLine2: { type: "string" },
+                        city: { type: "string" },
+                        state: { type: "string" },
+                        postalCode: { type: "string" },
+                        country: { type: "string" },
+                      },
+                    },
+                    otherUrls: {
+                      type: ["array", "null"],
+                      items: {
+                        type: "object",
+                        required: ["name", "url", "includeInResume"],
+                        properties: {
+                          name: { type: "string" },
+                          url: { type: "string", format: "uri" },
+                          includeInResume: { type: "boolean" },
+                        },
+                      },
+                    },
+                    resumeIncludes: {
+                      type: ["object", "null"],
+                      additionalProperties: { type: "boolean" },
+                    },
+                    notificationPreferences: {
+                      type: ["object", "null"],
+                      properties: {
+                        email: { type: "boolean" },
+                        sms: { type: "boolean" },
+                        push: { type: "boolean" },
+                        in_app: { type: "boolean" },
+                      },
+                    },
                     timezone: { type: ["string", "null"] },
                   },
                 },
                 examples: {
                   syncUser: {
                     value: {
-                      phone: null,
+                      phone: "(555) 123-4567",
                       linkedinUrl: "https://linkedin.com/in/careystortz",
-                      timezone: "America/New_York",
+                      address: {
+                        street: "123 Main St",
+                        streetLine2: "",
+                        city: "Green Bay",
+                        state: "WI",
+                        postalCode: "54301",
+                        country: "US",
+                      },
+                      resumeIncludes: {
+                        name: true,
+                        email: true,
+                        phone: true,
+                        location: true,
+                        streetAddress: false,
+                        linkedinUrl: true,
+                        timezone: false,
+                      },
+                      timezone: "America/Chicago",
                     },
                   },
                 },
@@ -754,6 +816,1332 @@ export function buildOpenApiSpec() {
           ],
         },
       },
+      "/api/job-sites": {
+        get: {
+          summary: "List job sites",
+          description:
+            "Returns job source/site configurations for the authenticated user.",
+          operationId: "listJobSites",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          responses: {
+            "200": {
+              description: "Job sites returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobSites"],
+                    properties: {
+                      jobSites: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/JobSiteRecord" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X GET 'http://dev01.int.stortz.tech:3000/api/job-sites' -H 'accept: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+        post: {
+          summary: "Create job site",
+          description:
+            "Creates a new job source/site configuration for the authenticated user.",
+          operationId: "createJobSite",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["url"],
+                  properties: {
+                    url: { type: "string" },
+                    company: { type: ["string", "null"] },
+                    industry: { type: ["string", "null"] },
+                    usPostalAddress: { type: ["string", "null"] },
+                    frequency: { type: ["string", "null"] },
+                    enabled: { type: "boolean" },
+                    timezone: { type: ["string", "null"] },
+                    authenticationType: { type: ["string", "null"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Job site created",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobSite"],
+                    properties: {
+                      jobSite: { $ref: "#/components/schemas/JobSiteRecord" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request body",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X POST 'http://dev01.int.stortz.tech:3000/api/job-sites' -H 'accept: application/json' -H 'content-type: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>' -d '{\"url\":\"https://jobs.example.com\",\"company\":\"Example Inc\",\"enabled\":true}'",
+            },
+          ],
+        },
+      },
+      "/api/job-sites/{id}": {
+        get: {
+          summary: "Get job site by id",
+          description: "Returns one job site owned by the authenticated user.",
+          operationId: "getJobSiteById",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Job site returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobSite"],
+                    properties: {
+                      jobSite: { $ref: "#/components/schemas/JobSiteRecord" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Job site not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+        },
+        patch: {
+          summary: "Update job site",
+          description: "Updates one job site owned by the authenticated user.",
+          operationId: "patchJobSiteById",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["url"],
+                  properties: {
+                    url: { type: "string" },
+                    company: { type: ["string", "null"] },
+                    industry: { type: ["string", "null"] },
+                    usPostalAddress: { type: ["string", "null"] },
+                    frequency: { type: ["string", "null"] },
+                    enabled: { type: "boolean" },
+                    timezone: { type: ["string", "null"] },
+                    authenticationType: { type: ["string", "null"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Job site updated",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobSite"],
+                    properties: {
+                      jobSite: { $ref: "#/components/schemas/JobSiteRecord" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request body",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Job site not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+        },
+        delete: {
+          summary: "Delete job site",
+          description: "Deletes one job site owned by the authenticated user.",
+          operationId: "deleteJobSiteById",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Job site deleted",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["deleted", "affectedRows", "id"],
+                    properties: {
+                      deleted: { type: "boolean" },
+                      affectedRows: { type: "integer" },
+                      id: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Job site not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/skills": {
+        get: {
+          summary: "List user skills",
+          description: "Returns all skills captured for the authenticated user.",
+          operationId: "listSkills",
+          tags: ["Skills"],
+          security: [{ auth0Session: [] }],
+          responses: {
+            "200": {
+              description: "Skills returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["skills"],
+                    properties: {
+                      skills: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/SkillRecord" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X GET 'http://dev01.int.stortz.tech:3000/api/skills' -H 'accept: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+        post: {
+          summary: "Create user skill",
+          description: "Creates a new skill for the authenticated user.",
+          operationId: "createSkill",
+          tags: ["Skills"],
+          security: [{ auth0Session: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["skillName"],
+                  properties: {
+                    skillName: { type: "string" },
+                    skillCategory: { type: ["string", "null"] },
+                    description: { type: ["string", "null"] },
+                    yearsOfExperience: { type: ["integer", "null"] },
+                    lastUsedDate: { type: ["string", "null"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Skill created",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["skill"],
+                    properties: {
+                      skill: { $ref: "#/components/schemas/SkillRecord" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request body",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X POST 'http://dev01.int.stortz.tech:3000/api/skills' -H 'accept: application/json' -H 'content-type: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>' -d '{\"skillName\":\"TypeScript\",\"skillCategory\":\"technical\",\"yearsOfExperience\":4}'",
+            },
+          ],
+        },
+      },
+      "/api/skills/{id}": {
+        get: {
+          summary: "Get skill by id",
+          description: "Returns one skill owned by the authenticated user.",
+          operationId: "getSkillById",
+          tags: ["Skills"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Skill returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["skill"],
+                    properties: {
+                      skill: { $ref: "#/components/schemas/SkillRecord" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Skill not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+        },
+        patch: {
+          summary: "Update skill",
+          description: "Updates an existing skill owned by the authenticated user.",
+          operationId: "updateSkillById",
+          tags: ["Skills"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["skillName"],
+                  properties: {
+                    skillName: { type: "string" },
+                    skillCategory: { type: ["string", "null"] },
+                    description: { type: ["string", "null"] },
+                    yearsOfExperience: { type: ["integer", "null"] },
+                    lastUsedDate: { type: ["string", "null"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Skill updated",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["skill"],
+                    properties: {
+                      skill: { $ref: "#/components/schemas/SkillRecord" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request body",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Skill not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+        },
+        delete: {
+          summary: "Delete skill",
+          description: "Deletes one skill owned by the authenticated user.",
+          operationId: "deleteSkillById",
+          tags: ["Skills"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Skill deleted",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["deleted", "affectedRows", "id"],
+                    properties: {
+                      deleted: { type: "boolean" },
+                      affectedRows: { type: "integer" },
+                      id: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Skill not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/job-listings": {
+        get: {
+          summary: "List job listings",
+          description:
+            "Returns job listings for the authenticated user. Supports filtering by listing status and job source.",
+          operationId: "listJobListings",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "status",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description: "Optional job listing status filter.",
+              example: "active",
+            },
+            {
+              name: "jobSourceId",
+              in: "query",
+              required: false,
+              schema: { type: "string", format: "uuid" },
+              description: "Optional job source UUID filter.",
+              example: "6d96f9ef-213d-4d68-9845-f6b4f6f57de8",
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Job listings returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobListings"],
+                    properties: {
+                      jobListings: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/JobListingRecord" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X GET 'http://dev01.int.stortz.tech:3000/api/job-listings?status=active' -H 'accept: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+        post: {
+          summary: "Create a job listing from URL",
+          description:
+            "Creates a single job listing from a provided posting URL and starts resume creation by creating a draft resume packet.",
+          operationId: "createJobListing",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["jobUrl"],
+                  properties: {
+                    jobUrl: { type: "string", format: "uri" },
+                  },
+                },
+                examples: {
+                  default: {
+                    summary: "Create from URL",
+                    value: {
+                      jobUrl: "https://company.example/jobs/software-engineer-2",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Job listing created and resume process started",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobListing", "resumePacket", "message"],
+                    properties: {
+                      jobListing: { $ref: "#/components/schemas/JobListingRecord" },
+                      resumePacket: {
+                        $ref: "#/components/schemas/ResumePacketRecord",
+                      },
+                      message: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid payload",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X POST 'http://dev01.int.stortz.tech:3000/api/job-listings' -H 'accept: application/json' -H 'content-type: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>' -d '{\"jobUrl\":\"https://company.example/jobs/software-engineer-2\"}'",
+            },
+          ],
+        },
+      },
+      "/api/job-listings/{id}": {
+        get: {
+          summary: "Get job listing by id",
+          description:
+            "Returns a single job listing owned by the authenticated user.",
+          operationId: "getJobListingById",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+              description: "Job listing UUID.",
+              example: "2cdca7a0-6f2e-42a5-b393-733a5a8d23e4",
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Job listing returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobListing"],
+                    properties: {
+                      jobListing: {
+                        $ref: "#/components/schemas/JobListingRecord",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Job listing not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X GET 'http://dev01.int.stortz.tech:3000/api/job-listings/2cdca7a0-6f2e-42a5-b393-733a5a8d23e4' -H 'accept: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+      },
+      "/api/job-listings/{id}/status": {
+        patch: {
+          summary: "Update job listing status",
+          description:
+            "Updates the status field for a single job listing owned by the authenticated user.",
+          operationId: "patchJobListingStatus",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+              description: "Job listing UUID.",
+              example: "2cdca7a0-6f2e-42a5-b393-733a5a8d23e4",
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["status"],
+                  properties: {
+                    status: { type: "string", maxLength: 50 },
+                  },
+                },
+                examples: {
+                  updateStatus: {
+                    value: { status: "archived" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Job listing status updated",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["jobListing"],
+                    properties: {
+                      jobListing: {
+                        $ref: "#/components/schemas/JobListingRecord",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request body",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Job listing not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X PATCH 'http://dev01.int.stortz.tech:3000/api/job-listings/2cdca7a0-6f2e-42a5-b393-733a5a8d23e4/status' -H 'accept: application/json' -H 'content-type: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>' -d '{\"status\":\"archived\"}'",
+            },
+          ],
+        },
+      },
+      "/api/resume-packets": {
+        get: {
+          summary: "List resume packets",
+          description:
+            "Returns resume packages/packets for the authenticated user. Supports filtering by job, packet status, and application status.",
+          operationId: "listResumePackets",
+          tags: ["Jobs"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "jobId",
+              in: "query",
+              required: false,
+              schema: { type: "string", format: "uuid" },
+              description: "Optional job UUID filter.",
+            },
+            {
+              name: "status",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description: "Optional resume packet status filter.",
+            },
+            {
+              name: "applicationStatus",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description: "Optional application status filter.",
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Resume packets returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["resumePackets"],
+                    properties: {
+                      resumePackets: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/ResumePacketRecord" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X GET 'http://dev01.int.stortz.tech:3000/api/resume-packets?applicationStatus=applied' -H 'accept: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+      },
+      "/api/chat/message": {
+        post: {
+          summary: "Create chat session and enqueue user message",
+          description:
+            "Creates or continues a conversation and returns a `sessionId` used by the SSE stream endpoint.",
+          operationId: "postChatMessage",
+          tags: ["Chat"],
+          security: [{ auth0Session: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["text"],
+                  properties: {
+                    text: { type: "string" },
+                    conversationId: {
+                      anyOf: [{ type: "string", format: "uuid" }, { type: "null" }],
+                    },
+                    attachmentIds: {
+                      type: "array",
+                      items: { type: "string", format: "uuid" },
+                    },
+                  },
+                },
+                examples: {
+                  sendMessage: {
+                    value: {
+                      text: "Please review my uploaded resume and suggest improvements.",
+                      conversationId: null,
+                      attachmentIds: ["b5faac3d-22ee-4903-8103-3438a9d874ed"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Chat message accepted",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["sessionId", "conversationId"],
+                    properties: {
+                      sessionId: { type: "string", format: "uuid" },
+                      conversationId: { type: "string", format: "uuid" },
+                    },
+                  },
+                  examples: {
+                    accepted: {
+                      value: {
+                        sessionId: "d338451a-cc2f-4c67-bced-3f189e5167a8",
+                        conversationId: "46f39744-a756-4ec1-a7e8-4d6d7132452b",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request body",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X POST 'http://dev01.int.stortz.tech:3000/api/chat/message' -H 'accept: application/json' -H 'content-type: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>' -d '{\"text\":\"Please review my uploaded resume.\",\"conversationId\":null,\"attachmentIds\":[]}'",
+            },
+          ],
+        },
+      },
+      "/api/chat/conversations": {
+        get: {
+          summary: "List conversations for current user",
+          description:
+            "Returns all chat conversations for the authenticated user ordered by most recent activity.",
+          operationId: "listChatConversations",
+          tags: ["Chat"],
+          security: [{ auth0Session: [] }],
+          responses: {
+            "200": {
+              description: "Conversation list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["conversations"],
+                    properties: {
+                      conversations: {
+                        type: "array",
+                        items: {
+                          $ref: "#/components/schemas/ChatConversationRecord",
+                        },
+                      },
+                    },
+                  },
+                  examples: {
+                    conversations: {
+                      value: {
+                        conversations: [
+                          {
+                            id: "46f39744-a756-4ec1-a7e8-4d6d7132452b",
+                            user_id: "2f31fd6a-f872-429f-89f4-85395deef8f9",
+                            title: null,
+                            skill_type: null,
+                            last_message_at: "2026-02-20T21:43:00Z",
+                            created_at: "2026-02-20T21:42:45Z",
+                            updated_at: "2026-02-20T21:43:00Z",
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X GET 'http://dev01.int.stortz.tech:3000/api/chat/conversations' -H 'accept: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+      },
+      "/api/chat/conversations/{conversationId}": {
+        patch: {
+          summary: "Update conversation title",
+          description:
+            "Updates the title for a conversation owned by the authenticated user.",
+          operationId: "patchChatConversationTitle",
+          tags: ["Chat"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "conversationId",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+              description: "Conversation UUID",
+              example: "46f39744-a756-4ec1-a7e8-4d6d7132452b",
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["title"],
+                  properties: {
+                    title: { type: ["string", "null"], maxLength: 500 },
+                  },
+                },
+                examples: {
+                  setTitle: {
+                    value: { title: "Resume review follow-up" },
+                  },
+                  clearTitle: {
+                    value: { title: null },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Conversation title updated",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["conversation"],
+                    properties: {
+                      conversation: {
+                        $ref: "#/components/schemas/ChatConversationRecord",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "400": {
+              description: "Invalid request body",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Conversation not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X PATCH 'http://dev01.int.stortz.tech:3000/api/chat/conversations/46f39744-a756-4ec1-a7e8-4d6d7132452b' -H 'accept: application/json' -H 'content-type: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>' -d '{\"title\":\"Resume review follow-up\"}'",
+            },
+          ],
+        },
+      },
+      "/api/chat/conversations/{conversationId}/messages": {
+        get: {
+          summary: "List messages for one conversation",
+          description:
+            "Returns message history for one conversation owned by the authenticated user.",
+          operationId: "listChatMessagesForConversation",
+          tags: ["Chat"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "conversationId",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+              description: "Conversation UUID",
+              example: "46f39744-a756-4ec1-a7e8-4d6d7132452b",
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Conversation and messages returned",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["conversation", "messages"],
+                    properties: {
+                      conversation: {
+                        $ref: "#/components/schemas/ChatConversationRecord",
+                      },
+                      messages: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/ChatMessageRecord" },
+                      },
+                    },
+                  },
+                  examples: {
+                    messages: {
+                      value: {
+                        conversation: {
+                          id: "46f39744-a756-4ec1-a7e8-4d6d7132452b",
+                          user_id: "2f31fd6a-f872-429f-89f4-85395deef8f9",
+                          title: null,
+                          skill_type: null,
+                          last_message_at: "2026-02-20T21:43:00Z",
+                          created_at: "2026-02-20T21:42:45Z",
+                          updated_at: "2026-02-20T21:43:00Z",
+                        },
+                        messages: [
+                          {
+                            id: "f3f6d3c7-6646-4067-a0ff-54f703be75d2",
+                            conversation_id: "46f39744-a756-4ec1-a7e8-4d6d7132452b",
+                            user_id: "2f31fd6a-f872-429f-89f4-85395deef8f9",
+                            role: "user",
+                            content_text: "Please review my resume.",
+                            attachment_document_ids: null,
+                            skill_type: null,
+                            model: null,
+                            prompt_tokens: null,
+                            completion_tokens: null,
+                            total_tokens: null,
+                            created_at: "2026-02-20T21:42:45Z",
+                            updated_at: "2026-02-20T21:42:45Z",
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Conversation not found",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -X GET 'http://dev01.int.stortz.tech:3000/api/chat/conversations/46f39744-a756-4ec1-a7e8-4d6d7132452b/messages' -H 'accept: application/json' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+      },
+      "/api/chat/stream/{sessionId}": {
+        get: {
+          summary: "Stream assistant response tokens (SSE)",
+          description:
+            "Streams assistant tokens for a previously created `sessionId` using Server-Sent Events.",
+          operationId: "getChatStream",
+          tags: ["Chat"],
+          security: [{ auth0Session: [] }],
+          parameters: [
+            {
+              name: "sessionId",
+              in: "path",
+              required: true,
+              schema: { type: "string", format: "uuid" },
+              description: "Session UUID returned by POST /api/chat/message",
+              example: "d338451a-cc2f-4c67-bced-3f189e5167a8",
+            },
+          ],
+          responses: {
+            "200": {
+              description: "SSE token stream",
+              content: {
+                "text/event-stream": {
+                  examples: {
+                    stream: {
+                      value:
+                        "event: token\ndata: Got it. \n\nevent: token\ndata: I received your message.\n\nevent: done\ndata:\n\n",
+                    },
+                  },
+                },
+              },
+            },
+            "401": {
+              description: "No valid Auth0 session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "404": {
+              description: "Unknown or expired session",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+          },
+          "x-codeSamples": [
+            {
+              lang: "bash",
+              label: "curl test request",
+              source:
+                "curl -N -X GET 'http://dev01.int.stortz.tech:3000/api/chat/stream/d338451a-cc2f-4c67-bced-3f189e5167a8' -H 'accept: text/event-stream' --cookie 'appSession=<AUTH0_SESSION_COOKIE>'",
+            },
+          ],
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -793,6 +2181,192 @@ export function buildOpenApiSpec() {
             uploaded_at: { type: "string", format: "date-time" },
           },
         },
+        ChatConversationRecord: {
+          type: "object",
+          required: [
+            "id",
+            "user_id",
+            "title",
+            "skill_type",
+            "last_message_at",
+            "created_at",
+            "updated_at",
+          ],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            title: { type: ["string", "null"] },
+            skill_type: { type: ["string", "null"] },
+            last_message_at: { type: ["string", "null"], format: "date-time" },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        ChatMessageRecord: {
+          type: "object",
+          required: [
+            "id",
+            "conversation_id",
+            "user_id",
+            "role",
+            "content_text",
+            "attachment_document_ids",
+            "skill_type",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "created_at",
+            "updated_at",
+          ],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            conversation_id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            role: { type: "string", enum: ["user", "assistant", "system"] },
+            content_text: { type: "string" },
+            attachment_document_ids: {
+              anyOf: [
+                { type: "array", items: { type: "string", format: "uuid" } },
+                { type: "null" },
+              ],
+            },
+            skill_type: { type: ["string", "null"] },
+            model: { type: ["string", "null"] },
+            prompt_tokens: { type: ["integer", "null"] },
+            completion_tokens: { type: ["integer", "null"] },
+            total_tokens: { type: ["integer", "null"] },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        JobSiteRecord: {
+          type: "object",
+          required: [
+            "id",
+            "user_id",
+            "url",
+            "enabled",
+            "error_count",
+            "created_at",
+            "updated_at",
+          ],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            company: { type: ["string", "null"] },
+            industry: { type: ["string", "null"] },
+            us_postal_address: { type: ["string", "null"] },
+            url: { type: "string" },
+            frequency: { type: ["string", "null"] },
+            last_polled_at: { type: ["string", "null"], format: "date-time" },
+            enabled: { type: "boolean" },
+            last_error_message: { type: ["string", "null"] },
+            error_count: { type: "integer" },
+            timezone: { type: ["string", "null"] },
+            authentication_type: { type: ["string", "null"] },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        JobListingRecord: {
+          type: "object",
+          required: [
+            "id",
+            "user_id",
+            "job_title",
+            "company_name",
+            "job_url",
+            "status",
+            "created_at",
+            "updated_at",
+          ],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            job_source_id: { type: ["string", "null"], format: "uuid" },
+            job_title: { type: "string" },
+            company_name: { type: "string" },
+            job_description_text: { type: ["string", "null"] },
+            requirements_text: { type: ["string", "null"] },
+            application_url: { type: ["string", "null"] },
+            job_url: { type: "string" },
+            external_job_id: { type: ["string", "null"] },
+            posting_date: { type: ["string", "null"] },
+            salary_range: {},
+            location: { type: ["string", "null"] },
+            job_location_type: { type: ["string", "null"] },
+            job_type: { type: ["string", "null"] },
+            job_level: { type: ["string", "null"] },
+            application_deadline: { type: ["string", "null"] },
+            user_interest_level: { type: ["string", "null"] },
+            user_tags: {},
+            status: { type: "string" },
+            first_seen_at: { type: ["string", "null"], format: "date-time" },
+            last_fetched_at: { type: ["string", "null"], format: "date-time" },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        ResumePacketRecord: {
+          type: "object",
+          required: ["id", "user_id", "job_id", "created_at", "updated_at"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            job_id: { type: "string", format: "uuid" },
+            status: { type: ["string", "null"] },
+            application_status: { type: ["string", "null"] },
+            date_applied: { type: ["string", "null"], format: "date-time" },
+            date_of_last_status_change: {
+              type: ["string", "null"],
+              format: "date-time",
+            },
+            application_method: { type: ["string", "null"] },
+            application_tracking_number: { type: ["string", "null"] },
+            portal_url: { type: ["string", "null"] },
+            version_number: { type: ["integer", "null"] },
+            parent_resume_package_id: { type: ["string", "null"], format: "uuid" },
+            resume_file_url: { type: ["string", "null"] },
+            resume_file_path: { type: ["string", "null"] },
+            resume_storage_type: { type: ["string", "null"] },
+            resume_file_size: { type: ["integer", "null"] },
+            resume_file_format: { type: ["string", "null"] },
+            cover_letter_file_url: { type: ["string", "null"] },
+            cover_letter_file_path: { type: ["string", "null"] },
+            cover_letter_storage_type: { type: ["string", "null"] },
+            cover_letter_file_size: { type: ["integer", "null"] },
+            cover_letter_file_format: { type: ["string", "null"] },
+            generated_at: { type: ["string", "null"], format: "date-time" },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
+        SkillRecord: {
+          type: "object",
+          required: [
+            "id",
+            "user_id",
+            "skill_name",
+            "skill_category",
+            "description",
+            "years_of_experience",
+            "last_used_date",
+            "created_at",
+            "updated_at",
+          ],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            user_id: { type: "string", format: "uuid" },
+            skill_name: { type: "string" },
+            skill_category: { type: ["string", "null"] },
+            description: { type: ["string", "null"] },
+            years_of_experience: { type: ["integer", "null"] },
+            last_used_date: { type: ["string", "null"] },
+            created_at: { type: "string", format: "date-time" },
+            updated_at: { type: "string", format: "date-time" },
+          },
+        },
         ErrorResponse: {
           type: "object",
           required: ["error"],
@@ -818,7 +2392,25 @@ export function buildOpenApiSpec() {
             email: { type: "string", format: "email" },
             email_verified: { type: "boolean" },
             phone: { type: ["string", "null"] },
-            linkedin_url: { type: ["string", "null"] },
+            linkedin_url: {
+              type: ["string", "null"],
+              description: "User-editable LinkedIn profile string.",
+            },
+            address: { type: ["string", "null"] },
+            other_urls: { type: ["array", "object", "null"] },
+            resume_field_includes: {
+              type: ["object", "null"],
+              additionalProperties: { type: "boolean" },
+            },
+            notification_preferences: {
+              type: ["object", "null"],
+              properties: {
+                email: { type: "boolean" },
+                sms: { type: "boolean" },
+                push: { type: "boolean" },
+                in_app: { type: "boolean" },
+              },
+            },
             timezone: { type: ["string", "null"] },
             created_at: { type: "string", format: "date-time" },
             updated_at: { type: "string", format: "date-time" },

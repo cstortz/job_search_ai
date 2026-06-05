@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: job-search-web-config
+  namespace: job-search
+  labels:
+    app.kubernetes.io/name: job-search-web
+data:
+  APP_BASE_URL: "http://job-search.dev.stortz.tech"
+  DB_API_BASE_URL: "http://database-api.database-system.svc.cluster.local:8000"
+  LLM_PROVIDER: "mock"

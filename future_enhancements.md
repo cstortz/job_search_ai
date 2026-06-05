@@ -700,6 +700,32 @@ This document outlines potential future features and enhancements for the Job Se
 
 ---
 
+#### 41. Field-Level Encryption + Searchable Data Services
+**Description:** Encrypt sensitive database fields so raw DB access cannot read plaintext, while still supporting approved search/analytics workflows through controlled backend services.
+**Tag:** Deferred until post-MVP
+
+**Data Model Additions:**
+- `Encrypted Field Metadata` entity: table_name, field_name, key_version, algorithm, created_at
+- `Key Derivation Config` entity: user_id, salt, kdf_params (JSON), last_rotated_at
+- `Search Token Index` entity: user_id, token_type, token_hash, entity_type, entity_id, created_at
+
+**Service Additions:**
+- DB API encryption/decryption endpoints for approved callers only
+- Search tokenization/indexing services for encrypted fields
+- Batch processing services (for example, pandas-based transforms) that operate on decrypted data in controlled execution contexts
+
+**Use Cases:**
+- Protect PII and sensitive notes at rest from direct DB readers
+- Keep core user workflows functional with encrypted storage
+- Support controlled search/reporting without storing plaintext
+
+**Benefits:**
+- Stronger data-at-rest security posture
+- Clear security boundary at API/service layer
+- Foundation for key rotation and auditability
+
+---
+
 ## Implementation Priority Recommendations
 
 ### Phase 1 (MVP+)

@@ -67,6 +67,7 @@ CREATE TABLE job_search_ai.users (
     email_verified BOOLEAN DEFAULT FALSE,
     linkedin_url VARCHAR(500),
     other_urls JSONB,
+    resume_field_includes JSONB DEFAULT '{"name":true,"email":true,"phone":true,"location":true,"streetAddress":false,"linkedinUrl":true,"timezone":false}'::jsonb,
     education JSONB,
     timezone VARCHAR(100) DEFAULT 'UTC',
     notification_preferences JSONB DEFAULT '{"email": true, "sms": false, "push": true, "in_app": true}'::jsonb,
@@ -84,7 +85,8 @@ COMMENT ON COLUMN job_search_ai.users.address IS 'User postal address';
 COMMENT ON COLUMN job_search_ai.users.email IS 'User email address (must be unique)';
 COMMENT ON COLUMN job_search_ai.users.email_verified IS 'Whether the email address has been verified';
 COMMENT ON COLUMN job_search_ai.users.linkedin_url IS 'User LinkedIn profile URL';
-COMMENT ON COLUMN job_search_ai.users.other_urls IS 'JSON object with other URLs: {"name": "url"} format';
+COMMENT ON COLUMN job_search_ai.users.other_urls IS 'JSON array of other URLs: [{"name":"GitHub","url":"https://...","includeInResume":true}]';
+COMMENT ON COLUMN job_search_ai.users.resume_field_includes IS 'Per-field flags for which profile values appear on generated resumes';
 COMMENT ON COLUMN job_search_ai.users.education IS 'JSON array of education entries: [{"institution": "...", "field": "...", "degree": "..."}]';
 COMMENT ON COLUMN job_search_ai.users.timezone IS 'User timezone (e.g., "America/New_York", "UTC") for scheduling reminders and notifications';
 COMMENT ON COLUMN job_search_ai.users.notification_preferences IS 'JSON object with notification channel preferences: {"email": true, "sms": false, "push": true, "in_app": true}';
@@ -876,6 +878,109 @@ CREATE INDEX idx_documents_resume_package_id ON job_search_ai.documents(resume_p
 CREATE INDEX idx_documents_document_type ON job_search_ai.documents(document_type);
 
 -- ============================================================================
+-- Table: chat_conversations
+-- Description: Chat conversation threads between user and AI assistant
+-- ============================================================================
+
+CREATE TABLE job_search_ai.chat_conversations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES job_search_ai.users(id) ON DELETE CASCADE,
+    title VARCHAR(500),
+    skill_type VARCHAR(100),
+    last_message_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE job_search_ai.chat_conversations IS 'Conversation threads for chat interactions. Each conversation belongs to one user and contains many messages.';
+COMMENT ON COLUMN job_search_ai.chat_conversations.id IS 'Primary key UUID for the conversation';
+COMMENT ON COLUMN job_search_ai.chat_conversations.user_id IS 'Foreign key to users table. Each conversation belongs to a user';
+COMMENT ON COLUMN job_search_ai.chat_conversations.title IS 'Optional user-friendly title for the conversation';
+COMMENT ON COLUMN job_search_ai.chat_conversations.skill_type IS 'Optional skill context: "resume-review", "generate-packet", "monitor-job-site", "query-packets", "apply-for-job"';
+COMMENT ON COLUMN job_search_ai.chat_conversations.last_message_at IS 'Timestamp of the most recent message in this conversation';
+COMMENT ON COLUMN job_search_ai.chat_conversations.created_at IS 'Timestamp when conversation was created';
+COMMENT ON COLUMN job_search_ai.chat_conversations.updated_at IS 'Timestamp when conversation was last updated';
+
+CREATE INDEX idx_chat_conversations_user_id ON job_search_ai.chat_conversations(user_id);
+CREATE INDEX idx_chat_conversations_last_message_at ON job_search_ai.chat_conversations(last_message_at);
+
+-- ============================================================================
+-- Table: chat_messages
+-- Description: Individual messages inside a chat conversation
+-- ============================================================================
+
+CREATE TABLE job_search_ai.chat_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_id UUID NOT NULL REFERENCES job_search_ai.chat_conversations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES job_search_ai.users(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content_text TEXT NOT NULL,
+    attachment_document_ids JSONB,
+    skill_type VARCHAR(100),
+    model VARCHAR(255),
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    total_tokens INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE job_search_ai.chat_messages IS 'Message records within conversations, including user prompts, assistant responses, and optional token accounting metadata.';
+COMMENT ON COLUMN job_search_ai.chat_messages.id IS 'Primary key UUID for the chat message';
+COMMENT ON COLUMN job_search_ai.chat_messages.conversation_id IS 'Foreign key to chat_conversations table. Message belongs to one conversation';
+COMMENT ON COLUMN job_search_ai.chat_messages.user_id IS 'Foreign key to users table. Used for tenant scoping and auth checks';
+COMMENT ON COLUMN job_search_ai.chat_messages.role IS 'Message role: user, assistant, or system';
+COMMENT ON COLUMN job_search_ai.chat_messages.content_text IS 'Plain text or markdown message content';
+COMMENT ON COLUMN job_search_ai.chat_messages.attachment_document_ids IS 'JSON array of document UUIDs attached to the message';
+COMMENT ON COLUMN job_search_ai.chat_messages.skill_type IS 'Optional skill context for this message';
+COMMENT ON COLUMN job_search_ai.chat_messages.model IS 'AI model used to generate assistant response (if applicable)';
+COMMENT ON COLUMN job_search_ai.chat_messages.prompt_tokens IS 'Prompt token count for metering (optional)';
+COMMENT ON COLUMN job_search_ai.chat_messages.completion_tokens IS 'Completion token count for metering (optional)';
+COMMENT ON COLUMN job_search_ai.chat_messages.total_tokens IS 'Total token count for metering (optional)';
+COMMENT ON COLUMN job_search_ai.chat_messages.created_at IS 'Timestamp when message was created';
+COMMENT ON COLUMN job_search_ai.chat_messages.updated_at IS 'Timestamp when message was last updated';
+
+CREATE INDEX idx_chat_messages_conversation_id ON job_search_ai.chat_messages(conversation_id);
+CREATE INDEX idx_chat_messages_user_id ON job_search_ai.chat_messages(user_id);
+CREATE INDEX idx_chat_messages_role ON job_search_ai.chat_messages(role);
+CREATE INDEX idx_chat_messages_created_at ON job_search_ai.chat_messages(created_at);
+
+-- ============================================================================
+-- Table: chat_stream_sessions
+-- Description: Temporary stream sessions used by SSE response flow
+-- ============================================================================
+
+CREATE TABLE job_search_ai.chat_stream_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    conversation_id UUID NOT NULL REFERENCES job_search_ai.chat_conversations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES job_search_ai.users(id) ON DELETE CASCADE,
+    request_message_id UUID REFERENCES job_search_ai.chat_messages(id) ON DELETE SET NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'streaming', 'done', 'error', 'expired')),
+    stream_payload JSONB,
+    error_message TEXT,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE job_search_ai.chat_stream_sessions IS 'Temporary stream state for SSE chat responses. Sessions are short-lived and can be safely expired/cleaned.';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.id IS 'Primary key UUID for the stream session';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.conversation_id IS 'Foreign key to chat_conversations table';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.user_id IS 'Foreign key to users table. Used to enforce per-user stream access';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.request_message_id IS 'Optional reference to the initiating user chat message';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.status IS 'Stream status lifecycle: pending, streaming, done, error, expired';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.stream_payload IS 'JSON payload with provider/session metadata for streaming';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.error_message IS 'Last stream error message when status=error';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.expires_at IS 'Expiration timestamp for server-side stream cleanup';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.created_at IS 'Timestamp when stream session was created';
+COMMENT ON COLUMN job_search_ai.chat_stream_sessions.updated_at IS 'Timestamp when stream session was last updated';
+
+CREATE INDEX idx_chat_stream_sessions_user_id ON job_search_ai.chat_stream_sessions(user_id);
+CREATE INDEX idx_chat_stream_sessions_conversation_id ON job_search_ai.chat_stream_sessions(conversation_id);
+CREATE INDEX idx_chat_stream_sessions_status ON job_search_ai.chat_stream_sessions(status);
+CREATE INDEX idx_chat_stream_sessions_expires_at ON job_search_ai.chat_stream_sessions(expires_at);
+
+-- ============================================================================
 -- Table: learning_progress
 -- Description: Tracking progress on gap-filling resources
 -- ============================================================================
@@ -1057,6 +1162,9 @@ CREATE TRIGGER update_application_notes_updated_at BEFORE UPDATE ON job_search_a
 CREATE TRIGGER update_offers_updated_at BEFORE UPDATE ON job_search_ai.offers FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
 CREATE TRIGGER update_references_updated_at BEFORE UPDATE ON job_search_ai.references FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
 CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON job_search_ai.documents FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
+CREATE TRIGGER update_chat_conversations_updated_at BEFORE UPDATE ON job_search_ai.chat_conversations FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
+CREATE TRIGGER update_chat_messages_updated_at BEFORE UPDATE ON job_search_ai.chat_messages FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
+CREATE TRIGGER update_chat_stream_sessions_updated_at BEFORE UPDATE ON job_search_ai.chat_stream_sessions FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
 CREATE TRIGGER update_learning_progress_updated_at BEFORE UPDATE ON job_search_ai.learning_progress FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
 CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON job_search_ai.companies FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();
 CREATE TRIGGER update_skills_progress_updated_at BEFORE UPDATE ON job_search_ai.skills_progress FOR EACH ROW EXECUTE FUNCTION job_search_ai.update_updated_at_column();

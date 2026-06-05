@@ -96,7 +96,45 @@ function endpoint(path: string, baseUrl: string): string {
   return `${normalizedBaseUrl(baseUrl)}${path}`;
 }
 
-function toClientMessage(status: number, fallback: string): string {
+function extractApiErrorDetail(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const detail = record.detail;
+
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0];
+    if (first && typeof first === "object" && "msg" in first) {
+      const message = (first as { msg?: unknown }).msg;
+      if (typeof message === "string" && message.trim()) {
+        return message.trim();
+      }
+    }
+  }
+
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message.trim();
+  }
+
+  return null;
+}
+
+function toClientMessage(
+  status: number,
+  fallback: string,
+  parsed?: unknown,
+): string {
+  const detail = extractApiErrorDetail(parsed);
+  if (detail) {
+    return detail;
+  }
+
   if (status === 401 || status === 403) {
     return "Database API authorization failed.";
   }
@@ -164,7 +202,7 @@ export class PreparedClient {
       if (!response.ok) {
         const fallback = `Prepared SQL API request failed with status ${response.status}.`;
         throw new PreparedClientError(
-          toClientMessage(response.status, fallback),
+          toClientMessage(response.status, fallback, parsed),
           response.status,
           parsed,
         );
