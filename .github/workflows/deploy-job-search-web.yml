@@ -9,7 +9,7 @@ on:
         type: string
 
   push:
-    branches: [master, main]
+    branches: [master]
     paths:
       - "services/job-search-web/**"
       - ".github/workflows/deploy-job-search-web.yml"
