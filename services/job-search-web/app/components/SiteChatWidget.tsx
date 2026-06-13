@@ -5,6 +5,7 @@ import {
   KeyboardEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -86,6 +87,7 @@ function chatClassName(isExpanded: boolean, dockPosition: ChatDockPosition): str
 export default function SiteChatWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [dockPosition, setDockPosition] = useState<ChatDockPosition>("bottom");
+  const [prefsReady, setPrefsReady] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -97,27 +99,41 @@ export default function SiteChatWidget() {
   const [authRequired, setAuthRequired] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<EventSource | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
   }, []);
+
+  useLayoutEffect(() => {
+    const storedPosition = readStoredChatDockPosition();
+    setDockPosition(storedPosition);
+    document.body.dataset.chatDock = storedPosition;
+    setPrefsReady(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!prefsReady) {
+      return;
+    }
+    document.body.dataset.chatDock = dockPosition;
+    storeChatDockPosition(dockPosition);
+  }, [dockPosition, prefsReady]);
 
   useEffect(() => {
     setConversationId(readStoredConversationId());
-    setDockPosition(readStoredChatDockPosition());
   }, []);
 
   useEffect(() => {
-    document.body.dataset.chatDock = dockPosition;
-    storeChatDockPosition(dockPosition);
-    return () => {
-      delete document.body.dataset.chatDock;
-    };
-  }, [dockPosition]);
-
-  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
     scrollToBottom();
   }, [messages, streamingContent, isExpanded, scrollToBottom]);
 
@@ -302,6 +318,14 @@ export default function SiteChatWidget() {
     }
   }
 
+  function handleDockPositionChange(nextPosition: ChatDockPosition) {
+    if (nextPosition === dockPosition) {
+      return;
+    }
+    setIsExpanded(false);
+    setDockPosition(nextPosition);
+  }
+
   function toggleExpanded() {
     setIsExpanded((previous) => !previous);
     if (!isExpanded) {
@@ -310,7 +334,12 @@ export default function SiteChatWidget() {
   }
 
   return (
-    <div className={chatClassName(isExpanded, dockPosition)} aria-label="Job search assistant chat">
+    <div
+      className={chatClassName(isExpanded, dockPosition)}
+      aria-label="Job search assistant chat"
+      suppressHydrationWarning
+      style={{ opacity: prefsReady ? 1 : 0 }}
+    >
       <div className="site-chat__header">
         <button
           type="button"
@@ -329,7 +358,7 @@ export default function SiteChatWidget() {
           <select
             value={dockPosition}
             onChange={(event) =>
-              setDockPosition(event.target.value as ChatDockPosition)
+              handleDockPositionChange(event.target.value as ChatDockPosition)
             }
             aria-label="Chat dock position"
           >
@@ -368,6 +397,7 @@ export default function SiteChatWidget() {
           ) : null}
 
           <div
+            ref={messagesContainerRef}
             className="site-chat__messages"
             role="log"
             aria-live="polite"

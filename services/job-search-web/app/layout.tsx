@@ -14,7 +14,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
+      <body data-chat-dock="bottom">
         <header style={{ background: "#111827", color: "#fff" }}>
           <div className="container row space-between">
             <strong>Job Search AI</strong>
