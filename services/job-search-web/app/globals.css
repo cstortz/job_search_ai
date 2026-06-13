@@ -188,7 +188,10 @@ body[data-chat-dock="right"] .site-main {
   background: #ffffff;
   border: 1px solid #d1d5db;
   box-shadow: 0 -8px 24px rgba(17, 24, 39, 0.12);
-  contain: layout style;
+}
+
+.site-chat__panel[hidden] {
+  display: none !important;
 }
 
 .site-chat--bottom {
@@ -407,6 +410,12 @@ body[data-chat-dock="right"] .site-main {
 
 .site-chat__bubble--streaming {
   position: relative;
+}
+
+.site-chat__streaming-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .site-chat__cursor {

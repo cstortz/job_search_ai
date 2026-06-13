@@ -87,7 +87,6 @@ function chatClassName(isExpanded: boolean, dockPosition: ChatDockPosition): str
 export default function SiteChatWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [dockPosition, setDockPosition] = useState<ChatDockPosition>("bottom");
-  const [prefsReady, setPrefsReady] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -102,6 +101,8 @@ export default function SiteChatWidget() {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<EventSource | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const streamingContentRef = useRef("");
+  const streamingFrameRef = useRef<number | null>(null);
 
   const scrollToBottom = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -111,36 +112,29 @@ export default function SiteChatWidget() {
     container.scrollTop = container.scrollHeight;
   }, []);
 
+  const flushStreamingContent = useCallback(() => {
+    streamingFrameRef.current = null;
+    setStreamingContent(streamingContentRef.current);
+    scrollToBottom();
+  }, [scrollToBottom]);
+
+  const appendStreamingToken = useCallback(
+    (token: string) => {
+      streamingContentRef.current += token;
+      if (streamingFrameRef.current !== null) {
+        return;
+      }
+      streamingFrameRef.current = window.requestAnimationFrame(flushStreamingContent);
+    },
+    [flushStreamingContent],
+  );
+
   useLayoutEffect(() => {
     const storedPosition = readStoredChatDockPosition();
-    setDockPosition(storedPosition);
+    if (storedPosition !== dockPosition) {
+      setDockPosition(storedPosition);
+    }
     document.body.dataset.chatDock = storedPosition;
-    setPrefsReady(true);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!prefsReady) {
-      return;
-    }
-    document.body.dataset.chatDock = dockPosition;
-    storeChatDockPosition(dockPosition);
-  }, [dockPosition, prefsReady]);
-
-  useEffect(() => {
-    setConversationId(readStoredConversationId());
-  }, []);
-
-  useEffect(() => {
-    if (!isExpanded) {
-      return;
-    }
-    scrollToBottom();
-  }, [messages, streamingContent, isExpanded, scrollToBottom]);
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.close();
-    };
   }, []);
 
   const loadConversation = useCallback(async (targetConversationId: string) => {
@@ -203,14 +197,25 @@ export default function SiteChatWidget() {
   }, [loadConversation]);
 
   useEffect(() => {
-    if (!isExpanded || loadingHistory) {
-      return;
-    }
-    if (messages.length > 0) {
-      return;
-    }
+    setConversationId(readStoredConversationId());
     void bootstrapConversation();
-  }, [isExpanded, messages.length, loadingHistory, bootstrapConversation]);
+  }, [bootstrapConversation]);
+
+  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+    scrollToBottom();
+  }, [messages, isExpanded, scrollToBottom]);
+
+  useEffect(() => {
+    return () => {
+      if (streamingFrameRef.current !== null) {
+        window.cancelAnimationFrame(streamingFrameRef.current);
+      }
+      streamRef.current?.close();
+    };
+  }, []);
 
   function startNewConversation() {
     streamRef.current?.close();
@@ -218,6 +223,7 @@ export default function SiteChatWidget() {
     setConversationId(null);
     storeConversationId(null);
     setMessages([]);
+    streamingContentRef.current = "";
     setStreamingContent("");
     setIsStreaming(false);
     setError(null);
@@ -254,28 +260,31 @@ export default function SiteChatWidget() {
       storeConversationId(result.conversationId);
 
       setIsStreaming(true);
+      streamingContentRef.current = "";
       setStreamingContent("");
 
       streamRef.current?.close();
       streamRef.current = openChatStream(
         result.sessionId,
-        (token) => {
-          setStreamingContent((previous) => previous + token);
-        },
+        appendStreamingToken,
         () => {
-          setStreamingContent((finalContent) => {
-            if (finalContent.trim()) {
-              setMessages((previous) => [
-                ...previous,
-                {
-                  id: `local-assistant-${Date.now()}`,
-                  role: "assistant",
-                  content: finalContent,
-                },
-              ]);
-            }
-            return "";
-          });
+          if (streamingFrameRef.current !== null) {
+            window.cancelAnimationFrame(streamingFrameRef.current);
+            streamingFrameRef.current = null;
+          }
+          const finalContent = streamingContentRef.current;
+          streamingContentRef.current = "";
+          setStreamingContent("");
+          if (finalContent.trim()) {
+            setMessages((previous) => [
+              ...previous,
+              {
+                id: `local-assistant-${Date.now()}`,
+                role: "assistant",
+                content: finalContent,
+              },
+            ]);
+          }
           setIsStreaming(false);
           setIsSending(false);
           streamRef.current = null;
@@ -324,6 +333,8 @@ export default function SiteChatWidget() {
     }
     setIsExpanded(false);
     setDockPosition(nextPosition);
+    document.body.dataset.chatDock = nextPosition;
+    storeChatDockPosition(nextPosition);
   }
 
   function toggleExpanded() {
@@ -338,7 +349,6 @@ export default function SiteChatWidget() {
       className={chatClassName(isExpanded, dockPosition)}
       aria-label="Job search assistant chat"
       suppressHydrationWarning
-      style={{ opacity: prefsReady ? 1 : 0 }}
     >
       <div className="site-chat__header">
         <button
@@ -369,20 +379,23 @@ export default function SiteChatWidget() {
             ))}
           </select>
         </label>
-        {isExpanded ? (
-          <button
-            type="button"
-            className="site-chat__new-chat"
-            onClick={startNewConversation}
-            disabled={isSending || isStreaming}
-          >
-            New chat
-          </button>
-        ) : null}
+      {isExpanded ? (
+        <button
+          type="button"
+          className="site-chat__new-chat"
+          onClick={startNewConversation}
+          disabled={isSending || isStreaming}
+        >
+          New chat
+        </button>
+      ) : null}
       </div>
 
-      {isExpanded ? (
-        <div id="site-chat-panel" className="site-chat__panel">
+      <div
+        id="site-chat-panel"
+        className="site-chat__panel"
+        hidden={!isExpanded}
+      >
           {authRequired ? (
             <p className="site-chat__notice">
               Sign in to use the assistant.{" "}
@@ -400,13 +413,9 @@ export default function SiteChatWidget() {
             ref={messagesContainerRef}
             className="site-chat__messages"
             role="log"
-            aria-live="polite"
+            aria-live={isStreaming ? "off" : "polite"}
             aria-relevant="additions"
           >
-            {loadingHistory ? (
-              <p className="site-chat__notice">Loading conversation…</p>
-            ) : null}
-
             {!loadingHistory && messages.length === 0 && !authRequired ? (
               <div className="site-chat__empty">
                 <p>Ask about your profile, jobs, skills, or interview prep.</p>
@@ -443,9 +452,11 @@ export default function SiteChatWidget() {
               </div>
             ))}
 
-            {isStreaming && streamingContent ? (
+            {isStreaming ? (
               <div className="site-chat__bubble site-chat__bubble--assistant site-chat__bubble--streaming">
-                <Markdown>{streamingContent}</Markdown>
+                {streamingContent ? (
+                  <p className="site-chat__streaming-text">{streamingContent}</p>
+                ) : null}
                 <span className="site-chat__cursor" aria-hidden="true" />
               </div>
             ) : null}
@@ -476,8 +487,7 @@ export default function SiteChatWidget() {
               {isSending || isStreaming ? "Sending…" : "Send"}
             </button>
           </form>
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }
