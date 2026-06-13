@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import SiteChatWidget from "./components/SiteChatWidget";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,7 +32,8 @@ export default function RootLayout({
             </nav>
           </div>
         </header>
-        <main className="container">{children}</main>
+        <main className="container site-main">{children}</main>
+        <SiteChatWidget />
       </body>
     </html>
   );
