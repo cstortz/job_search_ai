@@ -73,6 +73,8 @@ describe("parseResumeIncludes", () => {
       streetAddress: false,
       linkedinUrl: true,
       timezone: false,
+      preferredName: true,
+      workAuthorization: false,
     });
   });
 });

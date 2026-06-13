@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { DatabaseOperationError } from "../../../src/lib/db/db-repository";
+import { matchThresholdFromPreferences } from "../../../src/lib/models/job-list-filters";
 import {
   UnauthorizedError,
   getOrCreateCurrentUser,
@@ -20,7 +21,11 @@ export async function GET(request: NextRequest) {
       status,
       jobSourceId,
     });
-    return NextResponse.json({ jobListings });
+    return NextResponse.json({
+      jobListings,
+      matchThresholdPercent: matchThresholdFromPreferences(user.job_preferences),
+      jobPreferences: user.job_preferences,
+    });
   } catch (error) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.json({ error: error.message }, { status: 401 });

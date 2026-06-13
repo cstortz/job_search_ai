@@ -135,3 +135,35 @@ th {
   color: #6b7280;
   font-weight: 600;
 }
+
+.profile-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.profile-tab {
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.profile-tab--active {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.home-marketing h2 {
+  color: #111827;
+}

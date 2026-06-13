@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -11,10 +12,49 @@ import {
   listJobListings,
   listJobSites,
 } from "../../src/lib/api/job-client";
+import {
+  JOB_LIST_TAB_IDS,
+  JOB_LIST_TAB_LABELS,
+  countJobListingsByTab,
+  filterJobListingsByTab,
+  isJobListTabId,
+  sortJobListingsForTab,
+  type JobListTabId,
+} from "../../src/lib/models/job-list-filters";
+
+const DEFAULT_TAB: JobListTabId = "high-matches";
+
+function formatMatchScore(score: number | null | undefined): string {
+  if (score === null || score === undefined) {
+    return "—";
+  }
+  return `${score}%`;
+}
+
+function formatWorkType(listing: JobListingRecord): string {
+  const locationType = listing.job_location_type?.trim();
+  if (locationType) {
+    return locationType;
+  }
+  const location = listing.location?.toLowerCase() ?? "";
+  if (/\bremote\b/.test(location)) {
+    return "remote";
+  }
+  return "—";
+}
 
 export default function JobsPageClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") ?? DEFAULT_TAB;
+  const activeTab: JobListTabId = isJobListTabId(tabParam) ? tabParam : DEFAULT_TAB;
+
   const [jobSites, setJobSites] = useState<JobSiteRecord[]>([]);
   const [jobListings, setJobListings] = useState<JobListingRecord[]>([]);
+  const [jobPreferences, setJobPreferences] = useState<Record<string, unknown> | null>(
+    null,
+  );
+  const [matchThresholdPercent, setMatchThresholdPercent] = useState(70);
   const [statusFilter, setStatusFilter] = useState("");
   const [jobSourceIdFilter, setJobSourceIdFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -36,6 +76,8 @@ export default function JobsPageClient() {
       ]);
       setJobSites(sitesResult.jobSites);
       setJobListings(listingsResult.jobListings);
+      setJobPreferences(listingsResult.jobPreferences);
+      setMatchThresholdPercent(listingsResult.matchThresholdPercent);
     } catch (caught) {
       const message =
         caught instanceof ApiRequestError
@@ -52,6 +94,20 @@ export default function JobsPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const tabCounts = useMemo(
+    () => countJobListingsByTab(jobListings, jobPreferences),
+    [jobListings, jobPreferences],
+  );
+
+  const visibleListings = useMemo(
+    () =>
+      sortJobListingsForTab(
+        filterJobListingsByTab(jobListings, activeTab, jobPreferences),
+        activeTab,
+      ),
+    [jobListings, activeTab, jobPreferences],
+  );
+
   const sourceOptions = useMemo(
     () => [{ id: "", label: "All job sites" }].concat(
       jobSites.map((site) => ({
@@ -61,6 +117,12 @@ export default function JobsPageClient() {
     ),
     [jobSites],
   );
+
+  function selectTab(tabId: JobListTabId) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tabId);
+    router.replace(`/jobs?${params.toString()}`);
+  }
 
   async function onCreateJob() {
     const trimmedUrl = createJobUrl.trim();
@@ -100,7 +162,10 @@ export default function JobsPageClient() {
       <div className="card">
         <h1 style={{ marginTop: 0 }}>Job Listings</h1>
         <p className="muted" style={{ marginTop: 0 }}>
-          Browse and manage tracked job opportunities.
+          Browse tracked opportunities by match score, work type, and relocation
+          fit. High matches uses your{" "}
+          <Link href="/profile?tab=job-search">profile match threshold</Link> (
+          {matchThresholdPercent}%).
         </p>
         <div
           style={{
@@ -130,6 +195,29 @@ export default function JobsPageClient() {
             <p style={{ margin: 0, color: "#065f46" }}>{createMessage}</p>
           ) : null}
         </div>
+
+        <nav
+          className="profile-tabs"
+          aria-label="Job listing views"
+          style={{ marginBottom: "0.85rem" }}
+        >
+          {JOB_LIST_TAB_IDS.map((tabId) => (
+            <button
+              key={tabId}
+              type="button"
+              className={
+                activeTab === tabId
+                  ? "profile-tab profile-tab--active"
+                  : "profile-tab"
+              }
+              aria-current={activeTab === tabId ? "page" : undefined}
+              onClick={() => selectTab(tabId)}
+            >
+              {JOB_LIST_TAB_LABELS[tabId]} ({tabCounts[tabId]})
+            </button>
+          ))}
+        </nav>
+
         <div className="row" style={{ flexWrap: "wrap" }}>
           <select
             value={statusFilter}
@@ -160,25 +248,33 @@ export default function JobsPageClient() {
 
       <div className="card">
         <div className="row space-between" style={{ marginBottom: "0.5rem" }}>
-          <strong>{jobListings.length} listing(s)</strong>
+          <strong>
+            {visibleListings.length} listing(s) in {JOB_LIST_TAB_LABELS[activeTab]}
+          </strong>
           <span className="muted">{jobSites.length} site(s) configured</span>
         </div>
 
-        {jobListings.length === 0 && !loading ? (
-          <p className="muted">No job listings found for selected filters.</p>
+        {visibleListings.length === 0 && !loading ? (
+          <p className="muted">
+            {activeTab === "high-matches"
+              ? `No scored jobs at or above ${matchThresholdPercent}%. Jobs appear here after assessment.`
+              : "No job listings found for this view and filters."}
+          </p>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Title</th>
                 <th>Company</th>
+                <th>Match</th>
+                <th>Work type</th>
                 <th>Status</th>
                 <th>Location</th>
                 <th>Posted</th>
               </tr>
             </thead>
             <tbody>
-              {jobListings.map((listing) => (
+              {visibleListings.map((listing) => (
                 <tr key={listing.id}>
                   <td>
                     <Link href={`/jobs/${listing.id}`}>
@@ -186,6 +282,8 @@ export default function JobsPageClient() {
                     </Link>
                   </td>
                   <td>{listing.company_name}</td>
+                  <td>{formatMatchScore(listing.match_score)}</td>
+                  <td>{formatWorkType(listing)}</td>
                   <td>{listing.status || "-"}</td>
                   <td>{listing.location || "-"}</td>
                   <td>{listing.posting_date || "-"}</td>

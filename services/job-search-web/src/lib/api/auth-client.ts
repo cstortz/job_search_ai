@@ -1,4 +1,14 @@
 import type {
+  JobSearchPreferences,
+  OfficeTypePreferences,
+  RelocationPreferences,
+} from "../models/job-preferences";
+import type { UserEducationProfile } from "../models/education";
+import type { JobHistoryEntry } from "../models/job-history";
+import type {
+  MarketingStatements,
+} from "../models/marketing";
+import type {
   NotificationPreferences,
   ProfileAddress,
   ProfileOtherUrl,
@@ -18,6 +28,12 @@ export interface UserRecord {
   resume_field_includes: Partial<ProfileResumeIncludes> | null;
   notification_preferences: Partial<NotificationPreferences> | null;
   timezone: string | null;
+  preferred_name: string | null;
+  work_authorization: string | null;
+  marketing_statements: Partial<MarketingStatements> | null;
+  job_preferences: Record<string, unknown> | null;
+  education: UserEducationProfile | null;
+  work_history: JobHistoryEntry[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -78,15 +94,27 @@ export async function getCurrentUser(): Promise<{
   );
 }
 
-export async function syncUser(input: {
+export type SyncUserInput = {
+  timezone?: string;
   phone?: string | null;
   linkedinUrl?: string | null;
   address?: ProfileAddress | null;
   otherUrls?: ProfileOtherUrl[] | null;
   resumeIncludes?: Partial<ProfileResumeIncludes> | null;
   notificationPreferences?: Partial<NotificationPreferences> | null;
-  timezone: string;
-}): Promise<{ user: UserRecord }> {
+  preferredName?: string | null;
+  workAuthorization?: string | null;
+  marketingStatements?: Partial<MarketingStatements> | null;
+  jobPreferences?: {
+    relocation?: Partial<RelocationPreferences> | null;
+    officeType?: Partial<OfficeTypePreferences> | null;
+    jobSearch?: Partial<JobSearchPreferences> | null;
+  } | null;
+  education?: UserEducationProfile | null;
+  workHistory?: JobHistoryEntry[] | null;
+};
+
+export async function syncUser(input: SyncUserInput): Promise<{ user: UserRecord }> {
   return requestJson<{ user: UserRecord }>("/api/auth/sync-user", {
     method: "POST",
     body: JSON.stringify(input),

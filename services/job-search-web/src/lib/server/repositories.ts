@@ -101,7 +101,13 @@ const userSqlTemplates: UserSqlTemplates = {
       other_urls,
       address,
       resume_field_includes,
-      notification_preferences
+      notification_preferences,
+      preferred_name,
+      work_authorization,
+      marketing_statements,
+      job_preferences,
+      education,
+      work_history
     )
     VALUES (
       $1,
@@ -114,7 +120,13 @@ const userSqlTemplates: UserSqlTemplates = {
       CASE WHEN $8::text IS NULL THEN NULL ELSE CAST($8 AS jsonb) END,
       $9,
       CASE WHEN $10::text IS NULL THEN NULL ELSE CAST($10 AS jsonb) END,
-      CASE WHEN $11::text IS NULL THEN NULL ELSE CAST($11 AS jsonb) END
+      CASE WHEN $11::text IS NULL THEN NULL ELSE CAST($11 AS jsonb) END,
+      $12,
+      $13,
+      CASE WHEN $14::text IS NULL THEN NULL ELSE CAST($14 AS jsonb) END,
+      CASE WHEN $15::text IS NULL THEN NULL ELSE CAST($15 AS jsonb) END,
+      CASE WHEN $16::text IS NULL THEN NULL ELSE CAST($16 AS jsonb) END,
+      CASE WHEN $17::text IS NULL THEN NULL ELSE CAST($17 AS jsonb) END
     )
     ON CONFLICT (auth0_subject_id)
     DO UPDATE SET
@@ -128,6 +140,12 @@ const userSqlTemplates: UserSqlTemplates = {
       address = EXCLUDED.address,
       resume_field_includes = EXCLUDED.resume_field_includes,
       notification_preferences = EXCLUDED.notification_preferences,
+      preferred_name = EXCLUDED.preferred_name,
+      work_authorization = EXCLUDED.work_authorization,
+      marketing_statements = EXCLUDED.marketing_statements,
+      job_preferences = EXCLUDED.job_preferences,
+      education = EXCLUDED.education,
+      work_history = EXCLUDED.work_history,
       updated_at = CURRENT_TIMESTAMP
     RETURNING
       id::text AS id,
@@ -142,6 +160,12 @@ const userSqlTemplates: UserSqlTemplates = {
       resume_field_includes,
       notification_preferences,
       timezone,
+      preferred_name,
+      work_authorization,
+      marketing_statements,
+      job_preferences,
+      education,
+      work_history,
       created_at::text AS created_at,
       updated_at::text AS updated_at
   `,
@@ -159,6 +183,12 @@ const userSqlTemplates: UserSqlTemplates = {
       resume_field_includes,
       notification_preferences,
       timezone,
+      preferred_name,
+      work_authorization,
+      marketing_statements,
+      job_preferences,
+      education,
+      work_history,
       created_at::text AS created_at,
       updated_at::text AS updated_at
     FROM job_search_ai.users
@@ -496,12 +526,16 @@ const jobSqlTemplates: JobSqlTemplates = {
       first_seen_at::text AS first_seen_at,
       last_fetched_at::text AS last_fetched_at,
       created_at::text AS created_at,
-      updated_at::text AS updated_at
+      updated_at::text AS updated_at,
+      assessments.score AS match_score
     FROM job_search_ai.jobs
-    WHERE user_id = $1::uuid
-      AND ($2::text IS NULL OR status = $2::text)
-      AND ($3::uuid IS NULL OR job_source_id = $3::uuid)
-    ORDER BY created_at DESC
+    LEFT JOIN job_search_ai.assessments
+      ON assessments.job_id = jobs.id
+      AND assessments.user_id = jobs.user_id
+    WHERE jobs.user_id = $1::uuid
+      AND ($2::text IS NULL OR jobs.status = $2::text)
+      AND ($3::uuid IS NULL OR jobs.job_source_id = $3::uuid)
+    ORDER BY assessments.score DESC NULLS LAST, jobs.created_at DESC
   `,
   insertJobListingForUser: `
     INSERT INTO job_search_ai.jobs (

@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import HomePageClient from "./home/HomePageClient";
 
 export default function HomePage() {
-  redirect("/jobs");
+  return <HomePageClient />;
 }

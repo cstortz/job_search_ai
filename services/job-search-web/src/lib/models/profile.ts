@@ -11,12 +11,14 @@ export interface ProfileAddress {
 
 export type ProfileResumeFieldKey =
   | "name"
+  | "preferredName"
   | "email"
   | "phone"
   | "location"
   | "streetAddress"
   | "linkedinUrl"
-  | "timezone";
+  | "timezone"
+  | "workAuthorization";
 
 export type ProfileResumeIncludes = Record<ProfileResumeFieldKey, boolean>;
 
@@ -54,12 +56,14 @@ export const NOTIFICATION_PREFERENCE_LABELS: Record<
 
 export const DEFAULT_RESUME_INCLUDES: ProfileResumeIncludes = {
   name: true,
+  preferredName: true,
   email: true,
   phone: true,
   location: true,
   streetAddress: false,
   linkedinUrl: true,
   timezone: false,
+  workAuthorization: false,
 };
 
 export function emptyProfileAddress(): ProfileAddress {
@@ -218,12 +222,15 @@ export function parseResumeIncludes(
 
   return {
     name: parsed?.name ?? DEFAULT_RESUME_INCLUDES.name,
+    preferredName: parsed?.preferredName ?? DEFAULT_RESUME_INCLUDES.preferredName,
     email: parsed?.email ?? DEFAULT_RESUME_INCLUDES.email,
     phone: parsed?.phone ?? DEFAULT_RESUME_INCLUDES.phone,
     location: parsed?.location ?? DEFAULT_RESUME_INCLUDES.location,
     streetAddress: parsed?.streetAddress ?? DEFAULT_RESUME_INCLUDES.streetAddress,
     linkedinUrl: parsed?.linkedinUrl ?? DEFAULT_RESUME_INCLUDES.linkedinUrl,
     timezone: parsed?.timezone ?? DEFAULT_RESUME_INCLUDES.timezone,
+    workAuthorization:
+      parsed?.workAuthorization ?? DEFAULT_RESUME_INCLUDES.workAuthorization,
   };
 }
 

@@ -70,7 +70,7 @@ describe("PreparedClient", () => {
     ).rejects.toMatchObject<Partial<PreparedClientError>>({
       name: "PreparedClientError",
       status: 422,
-      message: "Prepared SQL request validation failed.",
+      message: "bad request",
     });
   });
 });

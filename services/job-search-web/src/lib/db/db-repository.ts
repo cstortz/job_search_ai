@@ -135,6 +135,12 @@ export interface UserRecord {
   resume_field_includes: Record<string, boolean> | null;
   notification_preferences: Record<string, boolean> | null;
   timezone: string | null;
+  preferred_name: string | null;
+  work_authorization: string | null;
+  marketing_statements: Record<string, unknown> | null;
+  job_preferences: Record<string, unknown> | null;
+  education: unknown;
+  work_history: unknown;
   created_at: string;
   updated_at: string;
 }
@@ -239,6 +245,7 @@ export interface JobListingRecord {
   last_fetched_at: string | null;
   created_at: string;
   updated_at: string;
+  match_score: number | null;
 }
 
 export interface ResumePacketRecord {
@@ -395,6 +402,12 @@ export class UserRepository extends PreparedRepository {
     resumeFieldIncludesJson?: string | null;
     notificationPreferencesJson?: string | null;
     timezone?: string | null;
+    preferredName?: string | null;
+    workAuthorization?: string | null;
+    marketingStatementsJson?: string | null;
+    jobPreferencesJson?: string | null;
+    educationJson?: string | null;
+    workHistoryJson?: string | null;
   }): Promise<UserRecord | null> {
     const response = await this.insert<UserRecord>(
       this.sql.upsertUserByAuth0Subject,
@@ -410,6 +423,12 @@ export class UserRepository extends PreparedRepository {
         "9": input.address ?? null,
         "10": input.resumeFieldIncludesJson ?? null,
         "11": input.notificationPreferencesJson ?? null,
+        "12": input.preferredName ?? null,
+        "13": input.workAuthorization ?? null,
+        "14": input.marketingStatementsJson ?? null,
+        "15": input.jobPreferencesJson ?? null,
+        "16": input.educationJson ?? null,
+        "17": input.workHistoryJson ?? null,
       },
     );
 

@@ -41,6 +41,7 @@ export interface JobListingRecord {
   last_fetched_at: string | null;
   created_at: string;
   updated_at: string;
+  match_score: number | null;
 }
 
 export interface ResumePacketRecord {
@@ -175,7 +176,11 @@ export async function deleteJobSite(
 export async function listJobListings(filters?: {
   status?: string | null;
   jobSourceId?: string | null;
-}): Promise<{ jobListings: JobListingRecord[] }> {
+}): Promise<{
+  jobListings: JobListingRecord[];
+  matchThresholdPercent: number;
+  jobPreferences: Record<string, unknown> | null;
+}> {
   const search = new URLSearchParams();
   if (filters?.status) {
     search.set("status", filters.status);
@@ -184,7 +189,11 @@ export async function listJobListings(filters?: {
     search.set("jobSourceId", filters.jobSourceId);
   }
   const suffix = search.toString() ? `?${search.toString()}` : "";
-  return requestJson<{ jobListings: JobListingRecord[] }>(`/api/job-listings${suffix}`, {
+  return requestJson<{
+    jobListings: JobListingRecord[];
+    matchThresholdPercent: number;
+    jobPreferences: Record<string, unknown> | null;
+  }>(`/api/job-listings${suffix}`, {
     method: "GET",
   });
 }

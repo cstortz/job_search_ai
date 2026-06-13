@@ -18,6 +18,7 @@ export default function RootLayout({
           <div className="container row space-between">
             <strong>Job Search AI</strong>
             <nav className="row">
+              <Link href="/">Home</Link>
               <Link href="/profile">Profile</Link>
               <Link href="/jobs">Jobs</Link>
               <Link href="/job-sites">Job Sites</Link>

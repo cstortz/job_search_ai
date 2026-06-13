@@ -1,6 +1,26 @@
 import "server-only";
 
 import {
+  mergeJobPreferences,
+  parseJobPreferences,
+  serializeJobPreferences,
+  type JobSearchPreferences,
+  type OfficeTypePreferences,
+  type RelocationPreferences,
+} from "../models/job-preferences";
+import {
+  parseUserEducation,
+  serializeUserEducation,
+} from "../models/education";
+import {
+  parseJobHistory,
+  serializeJobHistory,
+} from "../models/job-history";
+import {
+  parseMarketingStatements,
+  serializeMarketingStatements,
+} from "../models/marketing";
+import {
   parseNotificationPreferences,
   parseOtherUrlsFromDb,
   parseResumeIncludes,
@@ -33,6 +53,16 @@ export interface SyncCurrentUserOptions {
   resumeFieldIncludesJson?: string | null;
   notificationPreferencesJson?: string | null;
   timezone?: string | null;
+  preferredName?: string | null;
+  workAuthorization?: string | null;
+  marketingStatementsJson?: string | null;
+  jobPreferencesPatch?: {
+    relocation?: Partial<RelocationPreferences> | null;
+    officeType?: Partial<OfficeTypePreferences> | null;
+    jobSearch?: Partial<JobSearchPreferences> | null;
+  };
+  educationJson?: string | null;
+  workHistoryJson?: string | null;
 }
 
 function resolveOtherUrlsJson(
@@ -70,6 +100,52 @@ function resolveNotificationPreferencesJson(
     existing?.notification_preferences,
   );
   return serializeNotificationPreferences(preferences);
+}
+
+function resolveMarketingStatementsJson(
+  options: SyncCurrentUserOptions | undefined,
+  existing: UserRecord | null,
+): string | null {
+  if (options && "marketingStatementsJson" in options) {
+    return options.marketingStatementsJson ?? null;
+  }
+  const statements = parseMarketingStatements(existing?.marketing_statements);
+  return serializeMarketingStatements(statements);
+}
+
+function resolveJobPreferencesJson(
+  options: SyncCurrentUserOptions | undefined,
+  existing: UserRecord | null,
+): string | null {
+  const current = parseJobPreferences(existing?.job_preferences);
+  if (!options?.jobPreferencesPatch) {
+    return serializeJobPreferences(current);
+  }
+  return serializeJobPreferences(
+    mergeJobPreferences(current, options.jobPreferencesPatch),
+  );
+}
+
+function resolveEducationJson(
+  options: SyncCurrentUserOptions | undefined,
+  existing: UserRecord | null,
+): string | null {
+  if (options && "educationJson" in options) {
+    return options.educationJson ?? null;
+  }
+  const education = parseUserEducation(existing?.education);
+  return serializeUserEducation(education);
+}
+
+function resolveWorkHistoryJson(
+  options: SyncCurrentUserOptions | undefined,
+  existing: UserRecord | null,
+): string | null {
+  if (options && "workHistoryJson" in options) {
+    return options.workHistoryJson ?? null;
+  }
+  const workHistory = parseJobHistory(existing?.work_history);
+  return serializeJobHistory(workHistory);
 }
 
 function resolveProfileValue<T>(
@@ -138,6 +214,22 @@ export async function getOrCreateCurrentUser(options?: SyncCurrentUserOptions) {
       existing?.timezone ?? "UTC",
       "UTC",
     ),
+    preferredName: resolveProfileValue(
+      options,
+      "preferredName",
+      existing?.preferred_name ?? null,
+      null,
+    ),
+    workAuthorization: resolveProfileValue(
+      options,
+      "workAuthorization",
+      existing?.work_authorization ?? null,
+      null,
+    ),
+    marketingStatementsJson: resolveMarketingStatementsJson(options, existing),
+    jobPreferencesJson: resolveJobPreferencesJson(options, existing),
+    educationJson: resolveEducationJson(options, existing),
+    workHistoryJson: resolveWorkHistoryJson(options, existing),
   });
 
   if (!user) {
