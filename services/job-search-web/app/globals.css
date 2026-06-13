@@ -169,7 +169,7 @@ textarea {
 }
 
 .site-main {
-  padding-bottom: 4.5rem;
+  padding-bottom: 9rem;
 }
 
 .site-chat {
@@ -179,8 +179,8 @@ textarea {
   bottom: 0;
   z-index: 1000;
   background: #ffffff;
-  border-top: 1px solid #d1d5db;
-  box-shadow: 0 -8px 24px rgba(17, 24, 39, 0.12);
+  border-top: 3px solid #10b981;
+  box-shadow: 0 -8px 24px rgba(17, 24, 39, 0.18);
 }
 
 .site-chat--expanded {
@@ -300,6 +300,14 @@ textarea {
   50% {
     opacity: 0;
   }
+}
+
+.site-chat__peek-hint {
+  margin: 0;
+  padding: 0.45rem 1rem 0;
+  color: #6b7280;
+  font-size: 0.85rem;
+  background: #f9fafb;
 }
 
 .site-chat__composer {

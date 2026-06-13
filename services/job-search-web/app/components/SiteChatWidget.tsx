@@ -169,6 +169,12 @@ export default function SiteChatWidget() {
     void bootstrapConversation();
   }, [isExpanded, messages.length, loadingHistory, bootstrapConversation]);
 
+  useEffect(() => {
+    if (messages.length > 0 || isStreaming) {
+      setIsExpanded(true);
+    }
+  }, [messages.length, isStreaming]);
+
   function startNewConversation() {
     streamRef.current?.close();
     streamRef.current = null;
@@ -188,6 +194,7 @@ export default function SiteChatWidget() {
       return;
     }
 
+    setIsExpanded(true);
     setIsSending(true);
     setError(null);
     setAuthRequired(false);
@@ -297,7 +304,7 @@ export default function SiteChatWidget() {
         >
           <span className="site-chat__title">Job Search Assistant</span>
           <span className="site-chat__toggle-label">
-            {isExpanded ? "Minimize" : "Open chat"}
+            {isExpanded ? "Hide history" : "Show history"}
           </span>
         </button>
         {isExpanded ? (
@@ -382,32 +389,35 @@ export default function SiteChatWidget() {
 
             <div ref={messagesEndRef} />
           </div>
-
-          <form className="site-chat__composer" onSubmit={onSubmit}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={onInputKeyDown}
-              placeholder={
-                authRequired
-                  ? "Sign in to chat…"
-                  : "Ask the assistant… (Enter to send, Shift+Enter for newline)"
-              }
-              rows={2}
-              disabled={authRequired || isSending || isStreaming}
-            />
-            <button
-              type="submit"
-              disabled={
-                authRequired || isSending || isStreaming || !input.trim()
-              }
-            >
-              {isSending || isStreaming ? "Sending…" : "Send"}
-            </button>
-          </form>
         </div>
-      ) : null}
+      ) : (
+        <p className="site-chat__peek-hint">
+          Type below to chat. Use <strong>Show history</strong> to see past
+          messages.
+        </p>
+      )}
+
+      <form className="site-chat__composer" onSubmit={onSubmit}>
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={onInputKeyDown}
+          placeholder={
+            authRequired
+              ? "Sign in to chat…"
+              : "Ask the assistant… (Enter to send, Shift+Enter for newline)"
+          }
+          rows={isExpanded ? 2 : 1}
+          disabled={authRequired || isSending || isStreaming}
+        />
+        <button
+          type="submit"
+          disabled={authRequired || isSending || isStreaming || !input.trim()}
+        >
+          {isSending || isStreaming ? "Sending…" : "Send"}
+        </button>
+      </form>
     </div>
   );
 }
