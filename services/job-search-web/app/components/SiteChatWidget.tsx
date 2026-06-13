@@ -18,6 +18,13 @@ import {
   openChatStream,
   postChatMessage,
 } from "../../src/lib/api/chat-client";
+import {
+  CHAT_DOCK_POSITION_LABELS,
+  CHAT_DOCK_POSITIONS,
+  type ChatDockPosition,
+  readStoredChatDockPosition,
+  storeChatDockPosition,
+} from "../../src/lib/models/chat-dock";
 
 const CONVERSATION_STORAGE_KEY = "job-search-ai-chat-conversation-id";
 
@@ -66,8 +73,19 @@ function storeConversationId(conversationId: string | null) {
   }
 }
 
+function chatClassName(isExpanded: boolean, dockPosition: ChatDockPosition): string {
+  return [
+    "site-chat",
+    `site-chat--${dockPosition}`,
+    isExpanded ? "site-chat--expanded" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export default function SiteChatWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [dockPosition, setDockPosition] = useState<ChatDockPosition>("bottom");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -88,7 +106,16 @@ export default function SiteChatWidget() {
 
   useEffect(() => {
     setConversationId(readStoredConversationId());
+    setDockPosition(readStoredChatDockPosition());
   }, []);
+
+  useEffect(() => {
+    document.body.dataset.chatDock = dockPosition;
+    storeChatDockPosition(dockPosition);
+    return () => {
+      delete document.body.dataset.chatDock;
+    };
+  }, [dockPosition]);
 
   useEffect(() => {
     scrollToBottom();
@@ -169,12 +196,6 @@ export default function SiteChatWidget() {
     void bootstrapConversation();
   }, [isExpanded, messages.length, loadingHistory, bootstrapConversation]);
 
-  useEffect(() => {
-    if (messages.length > 0 || isStreaming) {
-      setIsExpanded(true);
-    }
-  }, [messages.length, isStreaming]);
-
   function startNewConversation() {
     streamRef.current?.close();
     streamRef.current = null;
@@ -194,7 +215,6 @@ export default function SiteChatWidget() {
       return;
     }
 
-    setIsExpanded(true);
     setIsSending(true);
     setError(null);
     setAuthRequired(false);
@@ -290,10 +310,7 @@ export default function SiteChatWidget() {
   }
 
   return (
-    <div
-      className={isExpanded ? "site-chat site-chat--expanded" : "site-chat"}
-      aria-label="Job search assistant chat"
-    >
+    <div className={chatClassName(isExpanded, dockPosition)} aria-label="Job search assistant chat">
       <div className="site-chat__header">
         <button
           type="button"
@@ -304,9 +321,25 @@ export default function SiteChatWidget() {
         >
           <span className="site-chat__title">Job Search Assistant</span>
           <span className="site-chat__toggle-label">
-            {isExpanded ? "Hide history" : "Show history"}
+            {isExpanded ? "Minimize" : "Open chat"}
           </span>
         </button>
+        <label className="site-chat__position">
+          <span className="site-chat__position-label">Dock</span>
+          <select
+            value={dockPosition}
+            onChange={(event) =>
+              setDockPosition(event.target.value as ChatDockPosition)
+            }
+            aria-label="Chat dock position"
+          >
+            {CHAT_DOCK_POSITIONS.map((position) => (
+              <option key={position} value={position}>
+                {CHAT_DOCK_POSITION_LABELS[position]}
+              </option>
+            ))}
+          </select>
+        </label>
         {isExpanded ? (
           <button
             type="button"
@@ -389,35 +422,32 @@ export default function SiteChatWidget() {
 
             <div ref={messagesEndRef} />
           </div>
-        </div>
-      ) : (
-        <p className="site-chat__peek-hint">
-          Type below to chat. Use <strong>Show history</strong> to see past
-          messages.
-        </p>
-      )}
 
-      <form className="site-chat__composer" onSubmit={onSubmit}>
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={onInputKeyDown}
-          placeholder={
-            authRequired
-              ? "Sign in to chat…"
-              : "Ask the assistant… (Enter to send, Shift+Enter for newline)"
-          }
-          rows={isExpanded ? 2 : 1}
-          disabled={authRequired || isSending || isStreaming}
-        />
-        <button
-          type="submit"
-          disabled={authRequired || isSending || isStreaming || !input.trim()}
-        >
-          {isSending || isStreaming ? "Sending…" : "Send"}
-        </button>
-      </form>
+          <form className="site-chat__composer" onSubmit={onSubmit}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={onInputKeyDown}
+              placeholder={
+                authRequired
+                  ? "Sign in to chat…"
+                  : "Ask the assistant… (Enter to send, Shift+Enter for newline)"
+              }
+              rows={2}
+              disabled={authRequired || isSending || isStreaming}
+            />
+            <button
+              type="submit"
+              disabled={
+                authRequired || isSending || isStreaming || !input.trim()
+              }
+            >
+              {isSending || isStreaming ? "Sending…" : "Send"}
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
